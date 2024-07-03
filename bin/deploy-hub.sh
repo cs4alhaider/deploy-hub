@@ -1,11 +1,17 @@
 #!/bin/bash
 
+# Define color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
 # Function to initialize a new deployable folder
 init_deployable() {
     # Check if a folder name is provided
     if [ -z "$1" ]; then
-        echo "🚫 Error: No folder name provided."
-        echo "📋 Usage: deploy-hub init <folder-name>"
+        echo -e "${RED}🚫 Error: No folder name provided.${NC}"
+        echo -e "${YELLOW}📋 Usage: deploy-hub init <folder-name>${NC}"
         exit 1
     fi
 
@@ -19,16 +25,16 @@ init_deployable() {
     touch "$compose_file" "$folder_path/README.md" "$folder_path/.env"
 
     # Output success message
-    echo "📁 Initialized new deployable folder: $folder_path"
-    echo "✅ Created $compose_file, README.md, and .env"
+    echo -e "${GREEN}📁 Initialized new deployable folder: $folder_path${NC}"
+    echo -e "${GREEN}✅ Created $compose_file, README.md, and .env${NC}"
 }
 
 # Function to run a docker-compose file from a specific folder
 run_deployable() {
     # Check if a folder name is provided
     if [ -z "$1" ]; then
-        echo "🚫 Error: No folder name provided."
-        echo "📋 Usage: deploy-hub run <folder-name>"
+        echo -e "${RED}🚫 Error: No folder name provided.${NC}"
+        echo -e "${YELLOW}📋 Usage: deploy-hub run <folder-name>${NC}"
         exit 1
     fi
 
@@ -39,7 +45,7 @@ run_deployable() {
 
     # Check if the docker-compose file exists
     if [ ! -f "$compose_file" ]; then
-        echo "🚫 Error: $compose_file not found."
+        echo -e "${RED}🚫 Error: $compose_file not found.${NC}"
         exit 1
     fi
 
@@ -49,15 +55,41 @@ run_deployable() {
     cd - > /dev/null
 
     # Output success message
-    echo "🚀 Deployed $folder_name using $compose_file"
+    echo -e "${GREEN}🚀 Deployed $folder_name using $compose_file${NC}"
+}
+
+# Function to run docker-compose files from all deployable folders
+run_all_deployables() {
+    local base_folder="deployable"
+    
+    # Iterate over all folders in the base deployable folder
+    for folder in "$base_folder"/*; do
+        if [ -d "$folder" ]; then
+            local folder_name=$(basename "$folder")
+            local compose_file="$folder/$folder_name.yml"
+
+            # Check if the docker-compose file exists
+            if [ -f "$compose_file" ]; then
+                # Navigate to the folder, run docker-compose, and return to the previous directory
+                cd "$folder"
+                docker-compose -f "$compose_file" up -d
+                cd - > /dev/null
+
+                # Output success message
+                echo -e "${GREEN}🚀 Deployed $folder_name using $compose_file${NC}"
+            else
+                echo -e "${RED}🚫 Error: $compose_file not found in $folder.${NC}"
+            fi
+        fi
+    done
 }
 
 # Function to stop a docker-compose service from a specific folder
 stop_deployable() {
     # Check if a folder name is provided
     if [ -z "$1" ]; then
-        echo "🚫 Error: No folder name provided."
-        echo "📋 Usage: deploy-hub stop <folder-name>"
+        echo -e "${RED}🚫 Error: No folder name provided.${NC}"
+        echo -e "${YELLOW}📋 Usage: deploy-hub stop <folder-name>${NC}"
         exit 1
     fi
 
@@ -68,7 +100,7 @@ stop_deployable() {
 
     # Check if the docker-compose file exists
     if [ ! -f "$compose_file" ]; then
-        echo "🚫 Error: $compose_file not found."
+        echo -e "${RED}🚫 Error: $compose_file not found.${NC}"
         exit 1
     fi
 
@@ -78,19 +110,45 @@ stop_deployable() {
     cd - > /dev/null
 
     # Output success message
-    echo "🛑 Stopped $folder_name using $compose_file"
+    echo -e "${GREEN}🛑 Stopped $folder_name using $compose_file${NC}"
+}
+
+# Function to stop all docker-compose services from all deployable folders
+stop_all_deployables() {
+    local base_folder="deployable"
+    
+    # Iterate over all folders in the base deployable folder
+    for folder in "$base_folder"/*; do
+        if [ -d "$folder" ]; then
+            local folder_name=$(basename "$folder")
+            local compose_file="$folder/$folder_name.yml"
+
+            # Check if the docker-compose file exists
+            if [ -f "$compose_file" ]; then
+                # Navigate to the folder, stop docker-compose, and return to the previous directory
+                cd "$folder"
+                docker-compose -f "$compose_file" down
+                cd - > /dev/null
+
+                # Output success message
+                echo -e "${GREEN}🛑 Stopped $folder_name using $compose_file${NC}"
+            else
+                echo -e "${RED}🚫 Error: $compose_file not found in $folder.${NC}"
+            fi
+        fi
+    done
 }
 
 # Main script logic
-# Check if at least two arguments are provided
-if [ "$#" -lt 2 ]; then
-    echo "🚫 Error: Invalid arguments."
-    echo "📋 Usage: deploy-hub <command> <folder-name>"
-    echo "Commands: init, run, stop"
+# Check if at least one argument is provided
+if [ "$#" -lt 1 ]; then
+    echo -e "${RED}🚫 Error: Invalid arguments.${NC}"
+    echo -e "${YELLOW}📋 Usage: deploy-hub <command> [folder-name]${NC}"
+    echo -e "${YELLOW}Commands: init, run, run -a|--all, stop, stop -a|--all${NC}"
     exit 1
 fi
 
-# Get the command and folder name from the arguments
+# Get the command and optional folder name from the arguments
 command=$1
 folder_name=$2
 
@@ -100,14 +158,22 @@ case $command in
         init_deployable "$folder_name"
         ;;
     run)
-        run_deployable "$folder_name"
+        if [[ "$folder_name" == "-a" || "$folder_name" == "--all" ]]; then
+            run_all_deployables
+        else
+            run_deployable "$folder_name"
+        fi
         ;;
     stop)
-        stop_deployable "$folder_name"
+        if [[ "$folder_name" == "-a" || "$folder_name" == "--all" ]]; then
+            stop_all_deployables
+        else
+            stop_deployable "$folder_name"
+        fi
         ;;
     *)
-        echo "🚫 Error: Invalid command."
-        echo "Commands: init, run, stop"
+        echo -e "${RED}🚫 Error: Invalid command.${NC}"
+        echo -e "${YELLOW}Commands: init, run, run -a|--all, stop, stop -a|--all${NC}"
         exit 1
         ;;
 esac
